@@ -43,7 +43,7 @@ type WebSocket = WebSocket
 
 {-| Attempt to open a connection to a particular URL.
 -}
-open : String -> Settings -> Task BadOpen WebSocket
+open : String -> String -> Settings -> Task BadOpen WebSocket
 open =
   Native.WebSocket.open
 
