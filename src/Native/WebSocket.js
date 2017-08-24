@@ -1,4 +1,4 @@
-var _elm_lang$websocket$Native_WebSocket = function() {
+var _alamont$websocket$Native_WebSocket = function() {
 
     function open(url, protocol, settings) {
         return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
