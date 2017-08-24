@@ -73,7 +73,7 @@ var _elm_lang$websocket$Native_WebSocket = function() {
     }
 
     return {
-        open: F2(open),
+        open: F3(open),
         send: F2(send),
         close: F3(close),
         bytesQueued: bytesQueued
