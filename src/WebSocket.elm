@@ -34,7 +34,6 @@ import Task exposing (Task)
 import Time exposing (Time)
 import WebSocket.LowLevel as WS
 
-
 -- COMMANDS
 
 
@@ -67,7 +66,7 @@ cmdMap _ (Send url protocol msg) =
 
 type MySub msg
     = Listen String String (String -> msg)
-    | KeepAlive String
+    | KeepAlive String String
 
 
 {-| Subscribe to any incoming messages on a websocket. You might say something
@@ -100,9 +99,9 @@ with an exponential backoff strategy. Any messages you try to `send` while the
 connection is down are queued and will be sent as soon as possible.
 
 -}
-keepAlive : String -> Sub msg
-keepAlive url =
-    subscription (KeepAlive url)
+keepAlive : String -> String -> Sub msg
+keepAlive url protocol =
+    subscription (KeepAlive url protocol)
 
 
 subMap : (a -> b) -> MySub a -> MySub b
@@ -111,8 +110,8 @@ subMap func sub =
         Listen url protocol tagger ->
             Listen url protocol (tagger >> func)
 
-        KeepAlive url ->
-            KeepAlive url
+        KeepAlive url protocol ->
+            KeepAlive url protocol
 
 
 
@@ -131,7 +130,7 @@ type alias SocketsDict =
 
 
 type alias QueuesDict =
-    Dict.Dict String (List String)
+    Dict.Dict String (String, List String)
 
 
 type alias SubsDict msg =
@@ -155,6 +154,11 @@ init =
 (&>) t1 t2 =
     Task.andThen (\_ -> t2) t1
 
+getProtocol name state = 
+    case Dict.get name state.sockets of
+        Nothing -> ""
+        Just (protocol, _) ->
+            protocol
 
 onEffects :
     Platform.Router msg Msg
@@ -172,25 +176,24 @@ onEffects router cmds subs state =
 
         cleanup newQueues =
             let
-                getProtocol name = case Dict.get name state.sockets of
-                    Nothing -> ""
-                    Just (protocol, _) ->
-                        protocol
-
+                newEntries : QueuesDict
                 newEntries =
-                    Dict.union newQueues (Dict.map (\k v -> []) newSubs)
+                    Dict.union newQueues (Dict.map (\k v -> (Tuple.first v ,[])) newSubs)
 
-                leftStep name _ getNewSockets =
+                leftStep : String -> (String, List String) -> Task x SocketsDict -> Task x SocketsDict
+                leftStep name (protocol, _) getNewSockets =
                     getNewSockets
                         |> Task.andThen
                             (\newSockets ->                                
-                                attemptOpen router 0 name (getProtocol name)
-                                    |> Task.andThen (\pid -> Task.succeed (Dict.insert name ((getProtocol name), Opening 0 pid) newSockets))
+                                attemptOpen router 0 name protocol
+                                    |> Task.andThen (\pid -> Task.succeed (Dict.insert name (protocol, Opening 0 pid) newSockets))
                             )
 
+                bothStep : String -> a -> (String, Connection) -> Task x SocketsDict -> Task x SocketsDict
                 bothStep name _ (protocol, connection) getNewSockets =
                     Task.map (Dict.insert name (protocol, connection)) getNewSockets
 
+                rightStep : String -> (String, Connection) -> Task x SocketsDict -> Task x SocketsDict
                 rightStep name (protocol, connection) getNewSockets =
                     closeConnection (protocol, connection) &> getNewSockets
 
@@ -198,7 +201,7 @@ onEffects router cmds subs state =
                     Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
             in
             collectNewSockets
-                |> Task.andThen (\newSockets -> Task.succeed (State newSockets newQueues newSubs))
+                |> Task.andThen (\newSockets -> Task.succeed (State newSockets newQueues newSubs ))
     in
     sendMessagesGetNewQueues
         |> Task.andThen cleanup
@@ -217,7 +220,7 @@ sendMessagesHelp cmds socketsDict queuesDict =
                         &> sendMessagesHelp rest socketsDict queuesDict
 
                 _ ->
-                    sendMessagesHelp rest socketsDict (Dict.update name (add msg) queuesDict)
+                    sendMessagesHelp rest socketsDict (Dict.update name (addTuple protocol msg) queuesDict)
 
 
 buildSubDict : List (MySub msg) -> SubsDict msg -> SubsDict msg
@@ -227,14 +230,14 @@ buildSubDict subs dict =
             dict
 
         (Listen name protocol tagger) :: rest ->
-            buildSubDict rest (Dict.update name (addTagger protocol tagger) dict)
+            buildSubDict rest (Dict.update name (addTuple protocol tagger) dict)
 
-        (KeepAlive name) :: rest ->
-            buildSubDict rest (Dict.update name (Just << Maybe.withDefault ("", [])) dict)
+        (KeepAlive name protocol) :: rest ->
+            buildSubDict rest (Dict.update name (Just << Maybe.withDefault (protocol, [])) dict)
 
 
-addTagger : String -> a -> Maybe (String, List a) -> Maybe (String, List a)
-addTagger protocol tagger maybeSub =
+addTuple : String -> a -> Maybe (String, List a) -> Maybe (String, List a)
+addTuple protocol tagger maybeSub =
     case maybeSub of
         Nothing ->
             Just (protocol, [ tagger ])
@@ -270,7 +273,7 @@ onSelfMsg router selfMsg state =
             let
                 sends =
                     Dict.get name state.subs
-                        |> Maybe.withDefault ("", [])
+                        |> Maybe.withDefault (getProtocol name state, [])
                         |> Tuple.second
                         |> List.map (\tagger -> Platform.sendToApp router (tagger str))
             in
@@ -301,7 +304,7 @@ onSelfMsg router selfMsg state =
                     
                     Task.succeed (updateSocket name (protocol, Connected socket) state)
 
-                Just messages ->
+                Just (protocol, messages) ->
                     List.foldl
                         (\msg task -> WS.send socket msg &> task)
                         (Task.succeed (removeQueue name (updateSocket name (protocol, Connected socket) state)))
