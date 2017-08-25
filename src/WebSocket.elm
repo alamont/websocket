@@ -39,7 +39,7 @@ import WebSocket.LowLevel as WS
 
 
 type MyCmd msg
-    = Send String String
+    = Send String String String
 
 
 {-| Send a message to a particular address. You might say something like this:
@@ -51,14 +51,14 @@ type MyCmd msg
 send one message and then closed. Not good!
 
 -}
-send : String -> String -> Cmd msg
-send url message =
-    command (Send url message)
+send : String -> String -> String -> Cmd msg
+send url protocol message =
+    command (Send url protocol message)
 
 
 cmdMap : (a -> b) -> MyCmd a -> MyCmd b
-cmdMap _ (Send url msg) =
-    Send url msg
+cmdMap _ (Send url protocol msg) =
+    Send url protocol msg
 
 
 
@@ -210,7 +210,7 @@ sendMessagesHelp cmds socketsDict queuesDict =
         [] ->
             Task.succeed queuesDict
 
-        (Send name msg) :: rest ->
+        (Send name protocol msg) :: rest ->
             case Dict.get name socketsDict of
                 Just (_, Connected socket) ->
                     WS.send socket msg
