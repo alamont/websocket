@@ -43,7 +43,7 @@ type MyCmd msg
 
 {-| Send a message to a particular address. You might say something like this:
 
-    send "ws://echo.websocket.org" "Hello!"
+    send "ws://echo.websocket.org" "subprotocol" "Hello!"
 
 **Note:** It is important that you are also subscribed to this address with
 `listen` or `keepAlive`. If you are not, the web socket will be created to
@@ -75,7 +75,7 @@ like this:
     type Msg = Echo String | ...
 
     subscriptions model =
-      listen "ws://echo.websocket.org" Echo
+      listen "ws://echo.websocket.org" "subprotocol" Echo
 
 **Note:** If the connection goes down, the effect manager tries to reconnect
 with an exponential backoff strategy. Any messages you try to `send` while the
@@ -92,7 +92,7 @@ for keeping a connection open for when you only need to `send` messages. So
 you might say something like this:
 
     subscriptions model =
-      keepAlive "ws://echo.websocket.org"
+      keepAlive "ws://echo.websocket.org" "subprotocol"
 
 **Note:** If the connection goes down, the effect manager tries to reconnect
 with an exponential backoff strategy. Any messages you try to `send` while the
