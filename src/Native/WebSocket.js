@@ -3,7 +3,11 @@ var _alamont$websocket$Native_WebSocket = function() {
     function open(url, protocol, settings) {
         return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
             try {
-                var socket = new WebSocket(url, protocol);
+                if (protocol === "") {
+                    var socket = new WebSocket(url);
+                } else {
+                    var socket = new WebSocket(url, protocol);
+                }
                 socket.elm_web_socket = true;
             } catch (err) {
                 return callback(_elm_lang$core$Native_Scheduler.fail({
